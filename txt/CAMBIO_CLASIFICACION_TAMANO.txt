@@ -1,0 +1,149 @@
+==============================================================
+  CAMBIO CLAVE: EL MODELO DETECTA "BACHE" Y EL CÓDIGO
+  CLASIFICA EL TAMAÑO (PEQUEÑO / MEDIANO / GRANDE)
+  Fecha: 08/11/2026
+==============================================================
+
+
+1. ¿EN QUÉ CONSISTE EL CAMBIO?
+--------------------------------------------------------------
+  Antes (idea inicial): el modelo YOLO tenía que aprender 3 clases
+  distintas: bache_pequeno, bache_mediano y bache_grande.
+
+  Ahora: el trabajo se divide en DOS PASOS.
+
+    PASO 1 - El modelo YOLO (la IA)
+      Solo aprende UNA clase: "bache".
+      Su trabajo es encontrar dónde hay un bache y dibujarle
+      una caja. No sabe nada de tamaños.
+
+    PASO 2 - El código del P006 (Python normal, sin IA)
+      Toma la caja que dio YOLO, mide cuánto espacio ocupa en
+      la imagen y según eso le pone el tamaño:
+
+        área de la caja / área de la imagen
+          menos de 2 %      ->  PEQUEÑO   (azul)
+          entre 2 % y 8 %   ->  MEDIANO   (amarillo)
+          más de 8 %        ->  GRANDE    (rojo)
+
+  Resultado: en la interfaz, en el CSV y en los gráficos se ven
+  igual los 3 tamaños. Lo que cambia es QUIÉN decide el tamaño.
+
+  Comparación fácil: es como un detector de metales y una regla.
+  El detector (YOLO) encuentra la moneda; la regla (el código)
+  la mide.
+
+
+2. ¿DÓNDE ESTÁ EN EL CÓDIGO? (P006_Interfaz.py)
+--------------------------------------------------------------
+  Límites (arriba del archivo):
+      BACHE_MEDIO  = 0.02   # >= 2 % de la imagen -> mediano
+      BACHE_GRANDE = 0.08   # >= 8 % de la imagen -> grande
+
+  Cálculo (dentro del bucle de detección):
+      ratio = ((x2 - x1) * (y2 - y1)) / area_frame
+      nivel, color = self._nivel_por_tamano(ratio, BACHE_MEDIO, BACHE_GRANDE)
+
+  Función que decide el tamaño:
+      def _nivel_por_tamano(ratio, umbral_medio, umbral_grande):
+          if ratio >= umbral_grande:
+              return "GRANDE", CV_ROJO
+          elif ratio >= umbral_medio:
+              return "MEDIO", CV_AMARILLO
+          return "PEQUENO", CV_AZUL
+
+  Agregado el 08/11:
+    - Cada caja muestra el tamaño escrito:
+        "#3 bache 0.88 MEDIANO"
+      (sale PEQUENO sin ñ porque cv2.putText no dibuja la ñ)
+    - El tamaño de cada bache se guarda en detecciones.csv
+      (columna "severidad") y el P007 lo usa para los gráficos.
+
+
+3. ¿POR QUÉ ES MEJOR ASÍ?
+--------------------------------------------------------------
+  - Al modelo le es más fácil aprender UNA cosa ("esto es bache")
+    que tres cosas que se ven casi iguales.
+  - Todos los baches se miden con la MISMA regla, no "a ojo"
+    como pasa cuando cada uno del grupo etiqueta a su criterio.
+  - Se pueden usar datasets externos (que vienen como "pothole")
+    sin re-etiquetar tamaños: solo se une "pothole" -> "bache".
+  - Si el profe dice que los límites están mal, se cambia el
+    0.02 o el 0.08 y listo, SIN volver a entrenar el modelo.
+
+
+4. ¿ES TRAMPA? -> NO
+--------------------------------------------------------------
+  - Es lo normal en sistemas reales: la IA detecta y el código
+    procesa el resultado (medir, contar, clasificar, guardar).
+    Esto se llama POST-PROCESAMIENTO.
+  - El proyecto lo pide: "procesar los datos obtenidos empleando
+    Python, NumPy y Pandas, calcular métricas...".
+  - No se inventa nada: el modelo de verdad encuentra el bache y
+    el código de verdad lo mide, en vivo, con el video real.
+
+  Lo que SÍ sería trampa (no hacerlo):
+    - Dibujar cajas a mano o editar el video.
+    - Poner números que el sistema no sacó.
+    - Presentar el video demo (demo_interfaz_P006.mp4) como si
+      fuera una grabación del programa. Esa ventana es una
+      réplica dibujada; para la exposición hay que GRABAR LA
+      INTERFAZ REAL funcionando.
+
+
+5. QUÉ DECIRLE AL PROFE / QUÉ PONER EN EL DOCUMENTO
+--------------------------------------------------------------
+  Antes de entregar, consultarle:
+    "Profe, ¿le parece bien si el modelo detecta 'bache' y el
+     tamaño (pequeño, mediano, grande) lo calcula el programa?"
+    - Si dice que sí: seguimos así.
+    - Si quiere que el modelo aprenda las 3 clases: se hace un
+      script que pone el tamaño a cada etiqueta con la misma
+      regla del 2 % y 8 % (así queda parejo y automático).
+
+  Frase para el documento / exposición:
+    "El modelo YOLO detecta los baches en la imagen y el sistema
+     clasifica su severidad (pequeño, mediano o grande) según el
+     área que ocupan en el cuadro."
+
+
+6. PROBLEMA QUE FALTA ARREGLAR: LA DISTANCIA
+--------------------------------------------------------------
+  El tamaño se mide EN LA IMAGEN. Cuando la cámara se acerca, el
+  bache ocupa más pantalla y "crece".
+  Ejemplo real (video 20261023_165705.mp4, bache #2):
+      de lejos ocupa 1 %  ->  a media distancia 3 %  ->  pegado 16 %
+  Ese bache en la realidad es MEDIANO.
+
+  Lo que hay ahora en el P006 (cambio del 08/11):
+    Cada bache se queda con el tamaño MÁXIMO que alcanzó.
+    Problema: un bache filmado de cerca siempre termina GRANDE.
+    (Antes era peor al revés: se quedaba con el tamaño de la
+     primera vez que aparecía, o sea casi siempre PEQUEÑO.)
+
+  SOLUCIÓN PROPUESTA (pendiente): ZONA DE MEDICIÓN
+    - Una franja horizontal fija en la imagen
+      (por ejemplo entre el 50 % y el 75 % de la altura).
+    - El tamaño se mide SOLO cuando el bache pasa por esa franja.
+    - Así todos se miden a la misma distancia de la cámara y se
+      pueden comparar de forma justa.
+    - Después se ajustan los límites (2 % / 8 %) con baches que
+      el grupo ya sabe si son pequeños, medianos o grandes.
+    - Grabar siempre con el celular a la misma altura y ángulo.
+
+  MEJORA EXTRA CON ARDUINO:
+    Con el sensor ultrasónico (HC-SR04) se mide la distancia real
+    de la cámara al piso y el tamaño sale más preciso. Esto además
+    cubre la parte de "sensores" que pide el proyecto.
+
+
+7. ARCHIVOS RELACIONADOS
+--------------------------------------------------------------
+  P006_Interfaz.py                         -> interfaz (con los cambios)
+  P007_Analisis.py                         -> gráficos y prioridad
+  resultados/detecciones.csv               -> lo que guarda la interfaz
+  resultados/como_funciona_detector.mp4    -> video explicativo (2 pasos)
+  resultados/demo_interfaz_P006.mp4        -> demo (réplica de la ventana
+                                              + best.pt real)
+  respaldo/                                -> versiones anteriores del P006
+  OBSERVACIONES_Y_MEJORAS.txt              -> todas las observaciones

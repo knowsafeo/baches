@@ -1,0 +1,162 @@
+==============================================================
+  PROYECTO: DETECCIÓN DE BACHES Y DETERIOROS - TACNA
+  Observaciones, problemas y mejoras
+  Última actualización: 08/11/2026
+==============================================================
+
+
+--------------------------------------------------------------
+1. ESTADO DEL PROYECTO (vs. lo que pide el profe)
+--------------------------------------------------------------
+
+YA TENEMOS:
+  [OK] Dataset propio: 20 videos (23/10) -> frames -> 236 imágenes
+       etiquetadas (186 train / 50 val), clases: bache y deterioro.
+  [OK] Modelo YOLO entrenado (segmentación, 100 épocas):
+       runs/segment/pavimento_seg/weights/best.pt
+  [OK] Evaluación: matriz de confusión, curvas P/R/F1, results.csv
+       (todo en runs/segment/pavimento_seg)
+  [OK] Interfaz P006: carga video o cámara, detecta, clasifica por
+       tamaño (pequeño/mediano/grande), capturas y resumen.
+  [OK] Registro en CSV de cada detección (agregado por LEANDRO el 08/11).
+  [OK] P007_Analisis.py con Pandas + NumPy + 5 gráficos y ranking de
+       prioridad por sector (agregado el 08/11).
+
+FALTA:
+  [ ] Arduino + sensores (vibración, ultrasonido, GPS...).  #EN CASO DE QUE LO HAGAMOS
+  [ ] Mejorar el modelo (re-etiquetar, ver sección 3 y 4).
+  [ ] Documento del proyecto (intro, problema, objetivos, hipótesis,
+      arquitectura, resultados, conclusiones, recomendaciones).
+  [ ] Diapositivas y demostración.
+  [ ] Video de 3 a 5 minutos.
+
+
+--------------------------------------------------------------
+2. CAMBIOS HECHOS EN EL CÓDIGO
+--------------------------------------------------------------
+
+P006_Interfaz.py
+  - Al cargar video o cámara pregunta el SECTOR / calle donde se grabó.
+  - Cada bache o deterioro nuevo se guarda con: fecha_hora, sector,
+    fuente (video), segundo, id, tipo, severidad, confianza, area_pct.
+  - Al detener o terminar el video se guarda en:
+        resultados/detecciones.csv
+    (si ya existe, agrega filas al final, no borra lo anterior)
+  - Se agregó "import pandas as pd".
+  - Copia del original en: respaldo/P006_Interfaz_original.py
+
+P007_Analisis.py (nuevo)
+  - Lee resultados/detecciones.csv
+  - Calcula: cantidad de baches/deterioros, confianza (promedio, min,
+    max, desviación), tabla tipo vs severidad, frecuencia por sector.
+  - Prioridad por sector: puntaje = severidad (1/2/3) x tipo
+    (bache 1.5, deterioro 1.0). Se clasifica ALTA / MEDIA / BAJA.
+  - Guarda gráficos en resultados/graficos:
+        1_tipo_severidad.png, 2_confianza.png, 3_sectores.png,
+        4_severidad.png, 5_prioridad.png
+  - Guarda ranking en resultados/prioridad_sectores.csv
+  - Imprime la propuesta de mantenimiento en orden.
+
+Librerías a instalar:
+  python -m pip install customtkinter pillow ultralytics opencv-python numpy pandas matplotlib
+
+OJO: no tener detecciones.csv abierto en Excel mientras se usa la
+interfaz, si no, no se puede guardar.
+
+
+--------------------------------------------------------------
+3. PROBLEMAS DEL MODELO ACTUAL (por qué detecta mal)
+--------------------------------------------------------------
+
+Métricas: precisión 0.53, recall 0.51, mAP50 0.44 (regular).
+Matriz de confusión: bache acierta 76 %, deterioro 67 %.
+El 62 % de las falsas alarmas son "deterioro" sobre pista normal.
+
+Causas encontradas:
+  a) DETERIORO MAL ETIQUETADO: muchos rectángulos de "deterioro" están
+     sobre pista normal sin grietas. El modelo aprendió que cualquier
+     pedazo de pista puede ser deterioro.
+  b) FOTOS REPETIDAS: 23 fotos están en data/bache y data/deterioro a
+     la vez (mismos videos en ambas carpetas). Cada copia tiene solo
+     una clase marcada y al armar el dataset una pisa a la otra.
+     Resultado: baches sin marcar = el modelo aprende "esto no es bache".
+  c) FORMAS MEZCLADAS: unos deterioros con rectángulo y otros con
+     polígono (inconsistente para segmentación).
+  d) POCAS FOTOS Y MUY PARECIDAS: 236 imágenes, casi todas de un solo
+     día y pocas calles, frames cada 1 segundo del mismo video.
+  e) CONFIANZA BAJA EN P006: CONFIANZA = 0.40 deja pasar muchas
+     detecciones falsas.
+  f) RUTAS DE ANDY: P004 y objetos.yaml apuntan a D:\Andy - Python1\...
+     Solo importa si se reentrena en otra PC.
+
+Nota: correr P006 directo está bien. El modelo ya lo entrenó Andy;
+P001-P004 solo se usan para crear/reentrenar el modelo.
+
+
+--------------------------------------------------------------
+4. PLAN DE MEJORA (decidido: DOS MODELOS SEPARADOS)
+--------------------------------------------------------------
+
+  Modelo 1 - BACHES
+    - Roboflow: Object Detection (cajas)
+    - Solo clase: bache
+    - Se usan las fotos ya etiquetadas, borrando la clase deterioro.
+
+  Modelo 2 - DETERIOROS
+    - Roboflow: Instance Segmentation (polígonos)
+    - Solo clase: deterioro
+    - Proyecto nuevo.
+
+Por qué es mejor:
+  - No se pierde lo ya etiquetado de baches.
+  - Las grietas se marcan mejor con polígono.
+  - Una clase ya no le estorba a la otra.
+
+Reglas para etiquetar:
+  - BACHE = hueco con profundidad.
+  - DETERIORO = grietas o piel de cocodrilo BIEN visibles.
+    NUNCA marcar pista que se ve normal.
+  - Si en una foto hay un bache sin marcar, MARCARLO (no dejarlo).
+
+Reglas para el dataset en Roboflow:
+  - Al subir videos: sacar 1 o 2 frames por segundo, NO todos.
+    (frames seguidos son casi iguales; inflan las métricas y cansan)
+  - Mejor muchas avenidas distintas que muchos frames del mismo video.
+  - Fotos vacías (sin anotaciones) = máximo 10 % del total.
+    Usar Generate -> Preprocessing -> "Filter Null" al 90 %.
+    O filtrar las imágenes "null" en la pestaña Dataset y revisarlas.
+  - Antes de borrar una foto vacía, revisar que no tenga un bache sin
+    marcar.
+
+Sobre las clases bache_pequeno / bache_mediano / bache_grande:
+  - NO conviene: el mismo bache se ve pequeño de lejos y grande de
+    cerca, y confunde al modelo.
+  - Unirlas en una sola "bache" (Roboflow: Modify Classes) y dejar que
+    P006 calcule el tamaño, como ya lo hace.
+
+Exportar:
+  - Baches: formato YOLOv8 (detección).
+  - Deterioros: formato YOLOv8 Segmentation.
+
+Cambios de código pendientes para este plan:
+  [ ] P004: entrenar cada modelo con su dataset de Roboflow.
+  [ ] P006: cargar 2 modelos (best_baches.pt y best_deterioro.pt).
+      Baches con caja, deterioros con máscara, mismo CSV.
+      Correr el modelo de deterioros cada 2-3 frames para no perder
+      velocidad en CPU.
+  [ ] P007: no cambia.
+
+
+--------------------------------------------------------------
+5. ARREGLO RÁPIDO (si no da el tiempo de re-etiquetar)
+--------------------------------------------------------------
+  - Subir la confianza por clase en P006 (bache 0.55, deterioro 0.70).
+  - Ignorar detecciones demasiado pequeñas.
+  - O quedarse solo con la clase "bache" (es la que mejor funciona).
+
+
+--------------------------------------------------------------
+6. PENDIENTE DE DEFINIR
+--------------------------------------------------------------
+  - Qué sensores hay para el Arduino (vibración, HC-SR04, GPS...).
+  - Sectores/avenidas reales de cada video para el CSV.

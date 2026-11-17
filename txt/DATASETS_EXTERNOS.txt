@@ -1,0 +1,28 @@
+==============================================================
+  DATASETS EXTERNOS DE BACHES (para complementar Tacna)
+==============================================================
+
+RECOMENDADOS
+  1. Roboflow Pothole Dataset - 665 fotos (se pasa directo a Roboflow)
+     https://public.roboflow.com/object-detection/pothole
+
+  2. Mendeley "Water-Filled and Dry Potholes" - 713 fotos de celular,
+     etiquetas YOLO
+     https://data.mendeley.com/datasets/tp95cdvgm8/1
+
+OPCIONAL
+  3. GitHub jaygala24 - 1243 fotos de internet, YOLO (revisar calidad)
+     https://github.com/jaygala24/pothole-detection
+
+EVITAR
+  - Bangladesh Road Damage (marca grietas como bache)
+     https://data.mendeley.com/datasets/ktnx66vtmc
+  - Kaggle "Forked" de cámara de auto (1119 fotos, baches lejanos):
+    usar solo una parte o nada.
+
+REGLAS
+  - Máximo ~300-400 fotos externas en total.
+  - Todas las externas van a TRAIN.
+  - Las de Tacna en train/valid/test (70/20/10).
+  - Al generar versión: "pothole" -> "bache" (Modify Classes).
+  - Mencionar en el documento de dónde salió cada dataset.

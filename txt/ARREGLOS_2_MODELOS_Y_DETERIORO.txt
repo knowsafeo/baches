@@ -1,0 +1,95 @@
+=====================================================================
+ ARREGLOS REALIZADOS - DETECCION DE BACHES Y DETERIORO (12/11/2026)
+=====================================================================
+
+---------------------------------------------------------------------
+1. DOS MODELOS SEPARADOS
+---------------------------------------------------------------------
+- best_baches.pt     -> Deteccion de objetos (cajas), clase "bache".
+                        Entrenado en Google Colab con yolov8n.pt.
+                        Resultado: mAP50 = 0.83 (Precision 0.84, Recall 0.75).
+- best_deterioro.pt  -> Segmentacion (poligonos), clase "deterioro".
+                        Entrenado en Google Colab con yolov8n-seg.pt.
+- best_deterioro_v1.pt -> respaldo del primer modelo de deterioro.
+
+El P006 carga los dos modelos. Si falta best_deterioro.pt igual
+funciona solo con baches.
+
+---------------------------------------------------------------------
+2. DATASET DE BACHES (Roboflow - Pothole Detection)
+---------------------------------------------------------------------
+- Fotos propias de Tacna + fotos externas (Mendeley, Roboflow Pothole).
+- Las fotos externas subidas como TXT sin classes.txt aparecian con la
+  clase "0". Se renombraron todas las clases (0, pothole, bache_pequeno,
+  bache_mediano, bache_grande) a una sola: "bache".
+- Al generar la version se uso "Filter Null" para no entrenar con
+  fotos que se subieron sin cajas.
+- Version final: 1707 imagenes (con Flip horizontal).
+
+---------------------------------------------------------------------
+3. DATASET DE DETERIORO (Roboflow - deterioro-limpio)
+---------------------------------------------------------------------
+- Fotos propias de Tacna etiquetadas con Smart Polygon.
+- Se agregaron 248 fotos del dataset "Road crack detection and
+  classification" (Roboflow Universe), solo la clase Crack-alligator
+  (piel de cocodrilo). Se descartaron las que tenian pintura amarilla
+  de carril. Crack-long, Crack-trans y pothole se eliminaron.
+
+PROBLEMA: el modelo marcaba pista lisa como deterioro.
+SOLUCION: se agregaron 52 fotos de PISTA LISA de Tacna sin etiquetas
+(marcadas como "Null"). Asi el modelo aprende que eso NO es deterioro.
+- En esa version NO se uso Filter Null (si no, borra esas fotos).
+- Se hizo Rebalance 80/15/5 para que tambien haya fotos de pista lisa
+  en valid y la nota mida si el modelo se equivoca.
+
+Comparacion de modelos (poligono, mAP50):
+   v1 (sin pista lisa)            : 0.75  -> marcaba pista lisa
+   v2 (reentrenado desde v1)      : 0.65  -> muy "miedoso"
+   v3 (desde cero, 80 epochs)     : 0.73  -> EL ELEGIDO
+                                             (ya no marca pista lisa)
+
+---------------------------------------------------------------------
+4. CAMBIOS EN P006_Interfaz.py
+---------------------------------------------------------------------
+a) Ruta del proyecto cambiada al disco D: (tambien en P007).
+
+b) Zona de medicion: el tamano del bache solo se mide cuando esta
+   entre el 50% y el 75% de la altura de la imagen. Asi todos se
+   miden a la misma distancia de la camara. Las lineas de la zona
+   estan ocultas (MOSTRAR_ZONA = False).
+
+c) Etiquetas:
+   - Bache: bache_pequeno (azul), bache_mediano (amarillo),
+            bache_grande (rojo). Los baches lejanos (antes de la zona)
+            no se dibujan; ya no salen cajas grises.
+   - Deterioro: solo dice "deterioro", color morado, sin tamano.
+
+d) Si un deterioro cae encima de un bache se queda solo el bache
+   (los 2 modelos marcaban el mismo hueco y se contaba doble).
+
+e) Fluidez:
+   - El modelo de deterioro se pasa 1 de cada 3 frames.
+   - Deterioro con imagen de 480 (mas rapido).
+   - Usa la tarjeta grafica (GPU NVIDIA) si la PC tiene.
+   - Los videos 4K se achican a 1280 de ancho (ANCHO_MAX); antes se
+     congelaban.
+
+f) PROBLEMA: el deterioro casi no aparecia aunque el modelo si lo veia
+   (61-78% de confianza).
+   CAUSA: se usaba seguimiento (track) solo cada 3 frames; como la
+   camara avanza, el seguimiento lo descartaba.
+   SOLUCION: el deterioro ahora usa predict (sin seguimiento) y el
+   numero de cada deterioro se asigna comparando con los vistos hace
+   poco (funcion _id_deterioro) para no contarlo dos veces.
+
+g) Confianza minima: baches 40%, deterioro 40% (CONFIANZA_DET).
+
+---------------------------------------------------------------------
+5. RESPALDOS (carpeta respaldo/)
+---------------------------------------------------------------------
+P006_Interfaz_antes_2modelos.py
+P006_Interfaz_antes_conf_det.py
+P006_Interfaz_antes_etiquetas.py
+P006_Interfaz_antes_reducir.py
+P006_Interfaz_antes_det_predict.py
+P007_Analisis_antes_ruta_D.py
